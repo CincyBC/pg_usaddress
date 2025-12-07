@@ -1,0 +1,9 @@
+[project]
+name = "pg-usaddress"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "python-crfsuite>=0.9.11",
+]

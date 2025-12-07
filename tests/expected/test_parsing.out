@@ -1,0 +1,299 @@
+-- Regression tests for pg_usaddress
+-- Load the extension
+CREATE EXTENSION pg_usaddress;
+-- =====================================================
+-- Section 1: Basic Address Parsing (parse_address_crf)
+-- =====================================================
+-- Test 1: Simple street address
+SELECT * FROM parse_address_crf('123 Main Street');
+ token  |     label     
+--------+---------------
+ 123    | AddressNumber
+ Main   | StreetName
+ Street | StreetName
+(3 rows)
+
+-- Test 2: Address with city
+SELECT * FROM parse_address_crf('456 Oak Avenue, Chicago');
+  token  |     label     
+---------+---------------
+ 456     | AddressNumber
+ Oak     | StreetName
+ Avenue  | StreetName
+ Chicago | PlaceName
+(4 rows)
+
+-- Test 3: Full address with state and zip
+SELECT * FROM parse_address_crf('789 Elm Boulevard, New York, NY 10001');
+   token   |     label     
+-----------+---------------
+ 789       | AddressNumber
+ Elm       | StreetName
+ Boulevard | StreetName
+ New       | PlaceName
+ York      | PlaceName
+ NY        | StateName
+ 10001     | ZipCode
+(7 rows)
+
+-- Test 4: Address with directional prefix
+SELECT * FROM parse_address_crf('100 North Michigan Avenue, Chicago, IL 60611');
+  token   |          label           
+----------+--------------------------
+ 100      | AddressNumber
+ North    | StreetNamePreDirectional
+ Michigan | StreetName
+ Avenue   | StreetNamePostType
+ Chicago  | PlaceName
+ IL       | StateName
+ 60611    | ZipCode
+(7 rows)
+
+-- Test 5: Address with directional suffix
+SELECT * FROM parse_address_crf('200 Broadway East, Seattle, WA 98102');
+  token   |     label     
+----------+---------------
+ 200      | AddressNumber
+ Broadway | StreetName
+ East     | StreetName
+ Seattle  | StreetName
+ WA       | StateName
+ 98102    | ZipCode
+(6 rows)
+
+-- Test 6: Address with apartment/unit
+SELECT * FROM parse_address_crf('350 Park Avenue, Apt 5B, New York, NY 10022');
+ token  |        label        
+--------+---------------------
+ 350    | AddressNumber
+ Park   | StreetName
+ Avenue | StreetNamePostType
+ Apt    | OccupancyType
+ 5B     | OccupancyIdentifier
+ New    | PlaceName
+ York   | PlaceName
+ NY     | StateName
+ 10022  | ZipCode
+(9 rows)
+
+-- Test 7: Address with suite
+SELECT * FROM parse_address_crf('1600 Pennsylvania Avenue NW, Suite 100, Washington, DC 20500');
+    token     |           label           
+--------------+---------------------------
+ 1600         | AddressNumber
+ Pennsylvania | StreetName
+ Avenue       | StreetName
+ NW           | StreetNamePostDirectional
+ Suite        | OccupancyType
+ 100          | OccupancyIdentifier
+ Washington   | PlaceName
+ DC           | StateName
+ 20500        | ZipCode
+(9 rows)
+
+-- Test 8: PO Box address
+SELECT * FROM parse_address_crf('PO Box 1234, Los Angeles, CA 90001');
+  token  |    label    
+---------+-------------
+ PO      | USPSBoxType
+ Box     | USPSBoxType
+ 1234    | USPSBoxID
+ Los     | PlaceName
+ Angeles | PlaceName
+ CA      | StateName
+ 90001   | ZipCode
+(7 rows)
+
+-- Test 9: Highway address
+SELECT * FROM parse_address_crf('12345 Highway 101, San Francisco, CA 94102');
+   token   |     label     
+-----------+---------------
+ 12345     | AddressNumber
+ Highway   | StreetName
+ 101       | StreetName
+ San       | PlaceName
+ Francisco | PlaceName
+ CA        | StateName
+ 94102     | ZipCode
+(7 rows)
+
+-- Test 10: Rural route
+SELECT * FROM parse_address_crf('RR 2 Box 45, Springfield, IL 62701');
+    token    |    label    
+-------------+-------------
+ RR          | USPSBoxType
+ 2           | USPSBoxID
+ Box         | USPSBoxType
+ 45          | USPSBoxID
+ Springfield | PlaceName
+ IL          | StateName
+ 62701       | ZipCode
+(7 rows)
+
+-- =====================================================
+-- Section 2: JSON Tagging (tag_address_crf)
+-- =====================================================
+-- Test 11: Simple tagged address
+SELECT tag_address_crf('123 Main Street');
+                    tag_address_crf                    
+-------------------------------------------------------
+ {"StreetName": "Main Street", "AddressNumber": "123"}
+(1 row)
+
+-- Test 12: Full tagged address
+SELECT tag_address_crf('456 Oak Avenue, Chicago, IL 60601');
+                                                                 tag_address_crf                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ {"ZipCode": "60601", "PlaceName": "Chicago ,", "StateName": "IL", "StreetName": "Oak Avenue", "AddressNumber": "456", "StreetNamePostType": ","}
+(1 row)
+
+-- Test 13: Complex tagged address  
+SELECT tag_address_crf('100 North Michigan Avenue, Suite 200, Chicago, IL 60611');
+                                                                                                       tag_address_crf                                                                                                       
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"ZipCode": "60611", "PlaceName": "Chicago ,", "StateName": "IL", "StreetName": "Michigan Avenue ,", "AddressNumber": "100", "OccupancyType": "Suite", "OccupancyIdentifier": "200 ,", "StreetNamePreDirectional": "North"}
+(1 row)
+
+-- =====================================================
+-- Section 3: Column Parsing (parse_address_crf_cols)
+-- =====================================================
+-- Test 14: Simple column parsing
+SELECT * FROM parse_address_crf_cols('123 Main Street');
+ address_number | address_number_prefix | address_number_suffix | street_name_pre_modifier | street_name_pre_directional | street_name_pre_type | street_name | street_name_post_type | street_name_post_directional | street_name_post_modifier | subaddress_identifier | subaddress_type | place_name | state_name | zip_code | zip_plus4 | usps_box_type | usps_box_id | building_name | occupancy_type | occupancy_identifier 
+----------------+-----------------------+-----------------------+--------------------------+-----------------------------+----------------------+-------------+-----------------------+------------------------------+---------------------------+-----------------------+-----------------+------------+------------+----------+-----------+---------------+-------------+---------------+----------------+----------------------
+ 123            |                       |                       |                          |                             |                      | Main Street |                       |                              |                           |                       |                 |            |            |          |           |               |             |               |                | 
+(1 row)
+
+-- Test 15: Full address column parsing
+SELECT * FROM parse_address_crf_cols('456 Oak Avenue, Chicago, IL 60601');
+ address_number | address_number_prefix | address_number_suffix | street_name_pre_modifier | street_name_pre_directional | street_name_pre_type | street_name | street_name_post_type | street_name_post_directional | street_name_post_modifier | subaddress_identifier | subaddress_type | place_name | state_name | zip_code | zip_plus4 | usps_box_type | usps_box_id | building_name | occupancy_type | occupancy_identifier 
+----------------+-----------------------+-----------------------+--------------------------+-----------------------------+----------------------+-------------+-----------------------+------------------------------+---------------------------+-----------------------+-----------------+------------+------------+----------+-----------+---------------+-------------+---------------+----------------+----------------------
+ 456            |                       |                       |                          |                             |                      | Oak Avenue  | ,                     |                              |                           |                       |                 | Chicago ,  | IL         | 60601    |           |               |             |               |                | 
+(1 row)
+
+-- Test 16: Complex address column parsing
+SELECT * FROM parse_address_crf_cols('100 North Michigan Avenue, Suite 200, Chicago, IL 60611');
+ address_number | address_number_prefix | address_number_suffix | street_name_pre_modifier | street_name_pre_directional | street_name_pre_type |    street_name    | street_name_post_type | street_name_post_directional | street_name_post_modifier | subaddress_identifier | subaddress_type | place_name | state_name | zip_code | zip_plus4 | usps_box_type | usps_box_id | building_name | occupancy_type | occupancy_identifier 
+----------------+-----------------------+-----------------------+--------------------------+-----------------------------+----------------------+-------------------+-----------------------+------------------------------+---------------------------+-----------------------+-----------------+------------+------------+----------+-----------+---------------+-------------+---------------+----------------+----------------------
+ 100            |                       |                       |                          | North                       |                      | Michigan Avenue , |                       |                              |                           |                       |                 | Chicago ,  | IL         | 60611    |           |               |             |               | Suite          | 200 ,
+(1 row)
+
+-- Test 17: Address with zip+4
+SELECT * FROM parse_address_crf_cols('500 5th Avenue, New York, NY 10110-0001');
+ address_number | address_number_prefix | address_number_suffix | street_name_pre_modifier | street_name_pre_directional | street_name_pre_type | street_name | street_name_post_type | street_name_post_directional | street_name_post_modifier | subaddress_identifier | subaddress_type |  place_name  | state_name |  zip_code  | zip_plus4 | usps_box_type | usps_box_id | building_name | occupancy_type | occupancy_identifier 
+----------------+-----------------------+-----------------------+--------------------------+-----------------------------+----------------------+-------------+-----------------------+------------------------------+---------------------------+-----------------------+-----------------+--------------+------------+------------+-----------+---------------+-------------+---------------+----------------+----------------------
+ 500            |                       |                       |                          |                             |                      | 5th Avenue  |                       |                              |                           |                       |                 | , New York , | NY -       | 10110 0001 |           |               |             |               |                | 
+(1 row)
+
+-- =====================================================
+-- Section 4: Edge Cases
+-- =====================================================
+-- Test 18: Numbered street name
+SELECT * FROM parse_address_crf('42 West 42nd Street, New York, NY 10036');
+ token  |     label     
+--------+---------------
+ 42     | AddressNumber
+ West   | StreetName
+ 42nd   | StreetName
+ Street | StreetName
+ New    | PlaceName
+ York   | PlaceName
+ NY     | StateName
+ 10036  | ZipCode
+(8 rows)
+
+-- Test 19: Multiple word street name
+SELECT * FROM parse_address_crf('1 Martin Luther King Jr Boulevard, Atlanta, GA 30303');
+   token   |     label     
+-----------+---------------
+ 1         | AddressNumber
+ Martin    | StreetName
+ Luther    | StreetName
+ King      | StreetName
+ Jr        | StreetName
+ Boulevard | StreetName
+ Atlanta   | PlaceName
+ GA        | StateName
+ 30303     | ZipCode
+(9 rows)
+
+-- Test 20: All uppercase input
+SELECT * FROM parse_address_crf('123 MAIN STREET, CHICAGO, IL 60601');
+  token  |     label     
+---------+---------------
+ 123     | AddressNumber
+ MAIN    | StreetName
+ STREET  | StreetName
+ CHICAGO | PlaceName
+ IL      | StateName
+ 60601   | ZipCode
+(6 rows)
+
+-- Test 21: Mixed case input
+SELECT * FROM parse_address_crf('123 Main STREET, chicago, IL 60601');
+  token  |     label     
+---------+---------------
+ 123     | AddressNumber
+ Main    | StreetName
+ STREET  | StreetName
+ chicago | PlaceName
+ IL      | StateName
+ 60601   | ZipCode
+(6 rows)
+
+-- Test 22: Extra whitespace
+SELECT * FROM parse_address_crf('  123   Main   Street  ,  Chicago  ,  IL  60601  ');
+  token  |     label     
+---------+---------------
+ 123     | AddressNumber
+ Main    | StreetName
+ Street  | StreetName
+ Chicago | PlaceName
+ IL      | StateName
+ 60601   | ZipCode
+(6 rows)
+
+-- =====================================================
+-- Section 5: Real-world Examples
+-- =====================================================
+-- Test 23: Empire State Building
+SELECT * FROM parse_address_crf('350 5th Avenue, New York, NY 10118');
+ token  |     label     
+--------+---------------
+ 350    | AddressNumber
+ 5th    | StreetName
+ Avenue | StreetName
+ New    | PlaceName
+ York   | PlaceName
+ NY     | StateName
+ 10118  | ZipCode
+(7 rows)
+
+-- Test 24: White House
+SELECT * FROM parse_address_crf('1600 Pennsylvania Avenue NW, Washington, DC 20500');
+    token     |     label     
+--------------+---------------
+ 1600         | AddressNumber
+ Pennsylvania | StreetName
+ Avenue       | StreetName
+ NW           | StreetName
+ Washington   | StreetName
+ DC           | StateName
+ 20500        | ZipCode
+(7 rows)
+
+-- Test 25: Willis Tower (formerly Sears Tower)
+SELECT * FROM parse_address_crf('233 South Wacker Drive, Chicago, IL 60606');
+  token  |          label           
+---------+--------------------------
+ 233     | AddressNumber
+ South   | StreetNamePreDirectional
+ Wacker  | StreetName
+ Drive   | StreetName
+ Chicago | PlaceName
+ IL      | StateName
+ 60606   | ZipCode
+(7 rows)
+
+-- Clean up
+DROP EXTENSION pg_usaddress;

@@ -30,7 +30,6 @@
 
 # Executables
 *.exe
-*.out
 *.app
 *.i*86
 *.x86_64
@@ -53,3 +52,6 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Allow PostgreSQL regression test expected output
+!tests/expected/*.out

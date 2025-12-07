@@ -1,0 +1,7 @@
+services:
+  db:
+    build: .
+    environment:
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
