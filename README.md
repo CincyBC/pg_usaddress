@@ -72,6 +72,45 @@ SELECT * FROM parse_address_crf('1600 Pennsylvania Ave NW, Washington, DC 20500'
 | DC | StateName |
 | 20500 | ZipCode |
 
+### `parse_address_crf_normalized(text)`
+
+Returns a table of tokens and labels, but applies USPS standardization:
+*   Uppercases all tokens.
+*   Maps street types (e.g., "Street" -> "ST") and occupancy types (e.g., "Suite" -> "STE") to USPS abbreviations.
+*   Removes all commas.
+
+```sql
+SELECT * FROM parse_address_crf_normalized('100 North Michigan Avenue, Suite 200, Chicago, IL 60611');
+```
+
+**Output:**
+
+| token | label |
+|-------|-------|
+| 100 | AddressNumber |
+| NORTH | StreetNamePreDirectional |
+| MICHIGAN | StreetName |
+| AVE | StreetName |
+| STE | OccupancyType |
+| 200 | OccupancyIdentifier |
+| CHICAGO | PlaceName |
+| IL | StateName |
+| 60611 | ZipCode |
+
+### `crf_full_address_normalized(text)`
+
+Returns a single string with the fully normalized address, concatenating components with proper spacing and placing a comma between the city and state.
+
+```sql
+SELECT crf_full_address_normalized('100 North Michigan Avenue, Suite 200, Chicago, IL 60611');
+```
+
+**Output:**
+
+```text
+100 NORTH MICHIGAN AVE STE 200 CHICAGO, IL 60611
+```
+
 ## Model Training
 
 If you want to retrain the underlying CRF model with your own data:
