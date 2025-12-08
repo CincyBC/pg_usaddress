@@ -48,3 +48,45 @@ RETURNS parsed_address_crf
 AS '$libdir/pg_usaddress', 'parse_address_crf_cols'
 LANGUAGE C IMMUTABLE STRICT;
 COMMENT ON FUNCTION parse_address_crf_cols(text) IS 'Parse an address into standardized columns using a CRF model';
+
+-- Function to get a fully normalized, concatenated address string
+CREATE OR REPLACE FUNCTION crf_full_address_normalized(input_text text)
+RETURNS text
+LANGUAGE SQL IMMUTABLE STRICT
+AS $$
+  WITH parsed AS (
+    SELECT token, label FROM parse_address_crf_normalized(input_text)
+  ),
+  aggregated AS (
+    SELECT 
+      string_agg(token, ' ') FILTER (WHERE label = 'AddressNumber') AS address_number,
+      string_agg(token, ' ') FILTER (WHERE label = 'StreetNamePreDirectional') AS street_pre_dir,
+      string_agg(token, ' ') FILTER (WHERE label = 'StreetName') AS street_name,
+      string_agg(token, ' ') FILTER (WHERE label = 'StreetNamePostType') AS street_post_type,
+      string_agg(token, ' ') FILTER (WHERE label = 'StreetNamePostDirectional') AS street_post_dir,
+      string_agg(token, ' ') FILTER (WHERE label = 'OccupancyType') AS occupancy_type,
+      string_agg(token, ' ') FILTER (WHERE label = 'OccupancyIdentifier') AS occupancy_id,
+      string_agg(token, ' ') FILTER (WHERE label = 'PlaceName') AS place_name,
+      string_agg(token, ' ') FILTER (WHERE label = 'StateName') AS state_name,
+      string_agg(token, ' ') FILTER (WHERE label = 'ZipCode') AS zip_code
+    FROM parsed
+  )
+  SELECT 
+    concat_ws(' ',
+      address_number,
+      street_pre_dir,
+      street_name,
+      street_post_type,
+      street_post_dir,
+      occupancy_type,
+      occupancy_id,
+      CASE 
+        WHEN place_name IS NOT NULL AND state_name IS NOT NULL THEN place_name || ','
+        ELSE place_name
+      END,
+      state_name,
+      zip_code
+    )
+  FROM aggregated;
+$$;
+COMMENT ON FUNCTION crf_full_address_normalized(text) IS 'Parse, normalize, and concatenate an address with comma between city and state';

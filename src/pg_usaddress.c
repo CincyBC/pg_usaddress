@@ -482,23 +482,10 @@ Datum parse_address_crf_normalized(PG_FUNCTION_ARGS) {
     }
 
     /* First pass: count tokens to keep.
-     * Rule: Remove commas EXCEPT when they appear between PlaceName and
-     * StateName.
+     * Rule: Remove ALL commas.
      */
     for (i = 0; i < num_items; i++) {
-      if (strcmp(tokens[i].token, ",") == 0) {
-        /* Check if this comma is between PlaceName and StateName */
-        int keep_comma = 0;
-        if (i > 0 && i < num_items - 1) {
-          if (strcmp(labels[i - 1], "PlaceName") == 0 &&
-              strcmp(labels[i + 1], "StateName") == 0) {
-            keep_comma = 1;
-          }
-        }
-        if (keep_comma) {
-          filtered_count++;
-        }
-      } else {
+      if (strcmp(tokens[i].token, ",") != 0) {
         filtered_count++;
       }
     }
@@ -510,20 +497,7 @@ Datum parse_address_crf_normalized(PG_FUNCTION_ARGS) {
 
     /* Second pass: copy and normalize tokens */
     for (i = 0; i < num_items; i++) {
-      int include_token = 1;
-
-      if (strcmp(tokens[i].token, ",") == 0) {
-        include_token = 0;
-        /* Check if this comma is between PlaceName and StateName */
-        if (i > 0 && i < num_items - 1) {
-          if (strcmp(labels[i - 1], "PlaceName") == 0 &&
-              strcmp(labels[i + 1], "StateName") == 0) {
-            include_token = 1;
-          }
-        }
-      }
-
-      if (include_token) {
+      if (strcmp(tokens[i].token, ",") != 0) {
         char *tok = pstrdup(tokens[i].token);
         char *lbl = pstrdup(labels[i]);
         const char *mapped;

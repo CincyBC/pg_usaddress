@@ -111,5 +111,15 @@ SELECT * FROM parse_address_crf_normalized('456 Oak Avenue, Chicago, IL 60601');
 -- Test 28: Normalized with Suite (SUITE -> STE) and comma between city/state
 SELECT * FROM parse_address_crf_normalized('100 North Michigan Avenue, Suite 200, Chicago, IL 60611');
 
+-- =====================================================
+-- Section 7: Full Address Normalization
+-- =====================================================
+
+-- Test 29: Full normalized address
+SELECT crf_full_address_normalized('123 Main Street, Chicago, IL 60601');
+
+-- Test 30: Full normalized with suite
+SELECT crf_full_address_normalized('100 North Michigan Avenue, Suite 200, Chicago, IL 60611');
+
 -- Clean up
 DROP EXTENSION pg_usaddress;
