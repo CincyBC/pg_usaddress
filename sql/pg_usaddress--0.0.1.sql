@@ -6,6 +6,12 @@ AS '$libdir/pg_usaddress', 'parse_address_crf'
 LANGUAGE C IMMUTABLE STRICT;
 COMMENT ON FUNCTION parse_address_crf(text) IS 'Parse an address into its components using a CRF model';
 
+CREATE OR REPLACE FUNCTION parse_address_crf_normalized(input_text text)
+RETURNS TABLE(token text, label text)
+AS '$libdir/pg_usaddress', 'parse_address_crf_normalized'
+LANGUAGE C IMMUTABLE STRICT;
+COMMENT ON FUNCTION parse_address_crf_normalized(text) IS 'Parse and normalize an address with USPS standardization';
+
 CREATE OR REPLACE FUNCTION tag_address_crf(input_text text)
 RETURNS jsonb
 AS '$libdir/pg_usaddress', 'tag_address_crf'

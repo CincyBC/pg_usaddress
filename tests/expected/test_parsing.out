@@ -295,5 +295,46 @@ SELECT * FROM parse_address_crf('233 South Wacker Drive, Chicago, IL 60606');
  60606   | ZipCode
 (7 rows)
 
+-- =====================================================
+-- Section 6: Normalized Address Parsing
+-- =====================================================
+-- Test 26: Normalized simple address (STREET -> ST, uppercase)
+SELECT * FROM parse_address_crf_normalized('123 Main Street');
+ token |     label     
+-------+---------------
+ 123   | AddressNumber
+ MAIN  | StreetName
+ ST    | StreetName
+(3 rows)
+
+-- Test 27: Normalized with Avenue (AVENUE -> AVE)
+SELECT * FROM parse_address_crf_normalized('456 Oak Avenue, Chicago, IL 60601');
+  token  |     label     
+---------+---------------
+ 456     | AddressNumber
+ OAK     | StreetName
+ AVE     | StreetName
+ CHICAGO | PlaceName
+ ,       | PlaceName
+ IL      | StateName
+ 60601   | ZipCode
+(7 rows)
+
+-- Test 28: Normalized with Suite (SUITE -> STE) and comma between city/state
+SELECT * FROM parse_address_crf_normalized('100 North Michigan Avenue, Suite 200, Chicago, IL 60611');
+  token   |          label           
+----------+--------------------------
+ 100      | AddressNumber
+ NORTH    | StreetNamePreDirectional
+ MICHIGAN | StreetName
+ AVE      | StreetName
+ STE      | OccupancyType
+ 200      | OccupancyIdentifier
+ CHICAGO  | PlaceName
+ ,        | PlaceName
+ IL       | StateName
+ 60611    | ZipCode
+(10 rows)
+
 -- Clean up
 DROP EXTENSION pg_usaddress;

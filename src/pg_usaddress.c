@@ -9,6 +9,7 @@
 
 #include "crfsuite_wrapper.h"
 #include "feature_extractor.h"
+#include "usps_mappings.h"
 
 PG_MODULE_MAGIC;
 
@@ -417,4 +418,182 @@ Datum parse_address_crf_cols(PG_FUNCTION_ARGS) {
   free(labels);
 
   PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
+}
+
+/* Helper: uppercase a string in-place */
+static void str_to_upper(char *s) {
+  for (; *s; s++) {
+    *s = toupper((unsigned char)*s);
+  }
+}
+
+PG_FUNCTION_INFO_V1(parse_address_crf_normalized);
+Datum parse_address_crf_normalized(PG_FUNCTION_ARGS) {
+  FuncCallContext *funcctx;
+  int call_cntr;
+  int max_calls;
+
+  if (SRF_IS_FIRSTCALL()) {
+    MemoryContext oldcontext;
+    text *arg;
+    char *input_str;
+    int num_items = 0;
+    TokenFeatures *tokens = NULL;
+    CrfSuiteItem *crf_items;
+    char **labels = NULL;
+    int i;
+    int filtered_count = 0;
+    int current_idx = 0;
+
+    typedef struct {
+      char **tokens;
+      char **labels;
+      int num_items;
+    } UserCtx;
+    UserCtx *uctx;
+
+    load_model_if_needed();
+    if (!usaddress_model)
+      ereport(ERROR, (errmsg("Model not loaded")));
+
+    funcctx = SRF_FIRSTCALL_INIT();
+    oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+    if (get_call_result_type(fcinfo, NULL, &funcctx->tuple_desc) !=
+        TYPEFUNC_COMPOSITE)
+      ereport(ERROR, (errmsg("return type must be a row type")));
+    BlessTupleDesc(funcctx->tuple_desc);
+
+    arg = PG_GETARG_TEXT_PP(0);
+    input_str = text_to_cstring(arg);
+
+    tokens = tokenize_and_extract_features(input_str, &num_items);
+
+    crf_items = malloc(num_items * sizeof(CrfSuiteItem));
+    for (i = 0; i < num_items; i++)
+      crf_items[i] = tokens[i].features;
+
+    if (crfsuite_model_tag(usaddress_model, crf_items, num_items, &labels) !=
+        0) {
+      free(crf_items);
+      free_token_features(tokens, num_items);
+      MemoryContextSwitchTo(oldcontext);
+      ereport(ERROR, (errmsg("Tagging failed")));
+    }
+
+    /* First pass: count tokens to keep.
+     * Rule: Remove commas EXCEPT when they appear between PlaceName and
+     * StateName.
+     */
+    for (i = 0; i < num_items; i++) {
+      if (strcmp(tokens[i].token, ",") == 0) {
+        /* Check if this comma is between PlaceName and StateName */
+        int keep_comma = 0;
+        if (i > 0 && i < num_items - 1) {
+          if (strcmp(labels[i - 1], "PlaceName") == 0 &&
+              strcmp(labels[i + 1], "StateName") == 0) {
+            keep_comma = 1;
+          }
+        }
+        if (keep_comma) {
+          filtered_count++;
+        }
+      } else {
+        filtered_count++;
+      }
+    }
+
+    uctx = (UserCtx *)palloc(sizeof(UserCtx));
+    uctx->tokens = palloc(filtered_count * sizeof(char *));
+    uctx->labels = palloc(filtered_count * sizeof(char *));
+    uctx->num_items = filtered_count;
+
+    /* Second pass: copy and normalize tokens */
+    for (i = 0; i < num_items; i++) {
+      int include_token = 1;
+
+      if (strcmp(tokens[i].token, ",") == 0) {
+        include_token = 0;
+        /* Check if this comma is between PlaceName and StateName */
+        if (i > 0 && i < num_items - 1) {
+          if (strcmp(labels[i - 1], "PlaceName") == 0 &&
+              strcmp(labels[i + 1], "StateName") == 0) {
+            include_token = 1;
+          }
+        }
+      }
+
+      if (include_token) {
+        char *tok = pstrdup(tokens[i].token);
+        char *lbl = pstrdup(labels[i]);
+        const char *mapped;
+
+        /* Uppercase the token */
+        str_to_upper(tok);
+
+        /* Apply USPS mappings based on label */
+        if (strcmp(lbl, "StreetNamePostType") == 0 ||
+            strcmp(lbl, "StreetName") == 0) {
+          /* Try to map street types */
+          mapped = lookup_street_type(tok);
+          if (mapped) {
+            pfree(tok);
+            tok = pstrdup(mapped);
+          }
+        } else if (strcmp(lbl, "OccupancyType") == 0 ||
+                   strcmp(lbl, "SubaddressType") == 0) {
+          /* Map occupancy/secondary types */
+          mapped = lookup_occupancy_type(tok);
+          if (mapped) {
+            pfree(tok);
+            tok = pstrdup(mapped);
+          }
+        }
+
+        uctx->tokens[current_idx] = tok;
+        uctx->labels[current_idx] = lbl;
+        current_idx++;
+      }
+    }
+
+    /* Free original arrays */
+    free_token_features(tokens, num_items);
+    for (i = 0; i < num_items; i++)
+      free(labels[i]);
+    free(labels);
+    free(crf_items);
+
+    funcctx->user_fctx = (void *)uctx;
+    funcctx->max_calls = filtered_count;
+
+    pfree(input_str);
+    MemoryContextSwitchTo(oldcontext);
+  }
+
+  funcctx = SRF_PERCALL_SETUP();
+  call_cntr = funcctx->call_cntr;
+  max_calls = funcctx->max_calls;
+
+  if (call_cntr < max_calls) {
+    typedef struct {
+      char **tokens;
+      char **labels;
+      int num_items;
+    } UserCtx;
+    UserCtx *uctx = (UserCtx *)funcctx->user_fctx;
+
+    Datum values[2];
+    bool nulls[2] = {false, false};
+    HeapTuple tuple;
+    Datum result;
+
+    values[0] = CStringGetTextDatum(uctx->tokens[call_cntr]);
+    values[1] = CStringGetTextDatum(uctx->labels[call_cntr]);
+
+    tuple = heap_form_tuple(funcctx->tuple_desc, values, nulls);
+    result = HeapTupleGetDatum(tuple);
+    SRF_RETURN_NEXT(funcctx, result);
+  } else {
+    SRF_RETURN_DONE(funcctx);
+  }
 }

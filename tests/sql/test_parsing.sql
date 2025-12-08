@@ -98,5 +98,18 @@ SELECT * FROM parse_address_crf('1600 Pennsylvania Avenue NW, Washington, DC 205
 -- Test 25: Willis Tower (formerly Sears Tower)
 SELECT * FROM parse_address_crf('233 South Wacker Drive, Chicago, IL 60606');
 
+-- =====================================================
+-- Section 6: Normalized Address Parsing
+-- =====================================================
+
+-- Test 26: Normalized simple address (STREET -> ST, uppercase)
+SELECT * FROM parse_address_crf_normalized('123 Main Street');
+
+-- Test 27: Normalized with Avenue (AVENUE -> AVE)
+SELECT * FROM parse_address_crf_normalized('456 Oak Avenue, Chicago, IL 60601');
+
+-- Test 28: Normalized with Suite (SUITE -> STE) and comma between city/state
+SELECT * FROM parse_address_crf_normalized('100 North Michigan Avenue, Suite 200, Chicago, IL 60611');
+
 -- Clean up
 DROP EXTENSION pg_usaddress;
