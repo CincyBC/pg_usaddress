@@ -2,6 +2,8 @@
 
 A PostgreSQL extension for parsing US addresses, based on the [datamade/usaddress](https://github.com/datamade/usaddress) Python package. This extension uses Conditional Random Fields (CRF) to parse address strings into their component parts (Street Number, Street Name, City, State, Zip, etc.) directly within PostgreSQL.
 
+This code was generated using Gemini and Claude translating the Python code to C and adapting it to the PostgreSQL environment.
+
 ## Features
 
 - **CRF-based Parsing**: Uses the same underlying statistical model as the Python `usaddress` package.
