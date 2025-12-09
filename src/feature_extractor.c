@@ -40,8 +40,14 @@ static int is_digit_str(const char *w) {
 }
 
 static void add_feature(CrfSuiteItem *item, const char *fmt, const char *val) {
-  item->features =
+  char **new_features =
       realloc(item->features, (item->num_features + 1) * sizeof(char *));
+  if (!new_features) {
+    /* Memory allocation failed - we can't add this feature */
+    return;
+  }
+  item->features = new_features;
+
   char buf[256];
   if (val)
     snprintf(buf, sizeof(buf), fmt, val);
@@ -271,6 +277,10 @@ TokenFeatures *tokenize_and_extract_features(const char *input,
   int cap = 16;
   int count = 0;
   TokenFeatures *result = malloc(cap * sizeof(TokenFeatures));
+  if (!result) {
+    *num_items = 0;
+    return NULL;
+  }
 
   const char *p = input;
   while (*p) {
@@ -294,7 +304,13 @@ TokenFeatures *tokenize_and_extract_features(const char *input,
 
     if (count >= cap) {
       cap *= 2;
-      result = realloc(result, cap * sizeof(TokenFeatures));
+      TokenFeatures *new_result = realloc(result, cap * sizeof(TokenFeatures));
+      if (!new_result) {
+        /* Memory allocation failed - clean up and return what we have */
+        *num_items = count;
+        return result;
+      }
+      result = new_result;
     }
 
     result[count].token = strdup_range(start, p);

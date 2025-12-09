@@ -19,20 +19,12 @@ static void load_model_if_needed(void) {
   char path[MAXPGPATH];
   char share_path[MAXPGPATH];
 
-  fprintf(stderr, "DEBUG: load_model_if_needed called, usaddress_model=%p\n",
-          (void *)usaddress_model);
-  fflush(stderr);
   if (usaddress_model)
     return;
 
   get_share_path(my_exec_path, share_path);
   snprintf(path, MAXPGPATH, "%s/extension/usaddr.crfsuite", share_path);
-  fprintf(stderr, "DEBUG: Loading model from path: %s\n", path);
-  fflush(stderr);
   usaddress_model = crfsuite_model_create(path);
-  fprintf(stderr, "DEBUG: crfsuite_model_create returned %p\n",
-          (void *)usaddress_model);
-  fflush(stderr);
   if (!usaddress_model) {
     ereport(WARNING,
             (errmsg("Could not load usaddr.crfsuite model from %s", path)));
@@ -44,8 +36,6 @@ Datum parse_address_crf(PG_FUNCTION_ARGS) {
   FuncCallContext *funcctx;
   int call_cntr;
   int max_calls;
-
-  ereport(LOG, (errmsg("DEBUG PG: parse_address_crf entered")));
 
   if (SRF_IS_FIRSTCALL()) {
     MemoryContext oldcontext;
@@ -66,10 +56,7 @@ Datum parse_address_crf(PG_FUNCTION_ARGS) {
     } UserCtx;
     UserCtx *uctx;
 
-    ereport(LOG, (errmsg("DEBUG PG: Calling load_model_if_needed")));
     load_model_if_needed();
-    ereport(LOG, (errmsg("DEBUG PG: Model loaded, usaddress_model=%p",
-                         (void *)usaddress_model)));
     if (!usaddress_model)
       ereport(ERROR, (errmsg("Model not loaded")));
 
@@ -84,21 +71,13 @@ Datum parse_address_crf(PG_FUNCTION_ARGS) {
 
     arg = PG_GETARG_TEXT_PP(0);
     input_str = text_to_cstring(arg);
-    ereport(LOG, (errmsg("DEBUG PG: Input string: '%s'", input_str)));
 
-    ereport(LOG, (errmsg("DEBUG PG: Calling tokenize_and_extract_features")));
     tokens = tokenize_and_extract_features(input_str, &num_items);
-    fprintf(stderr, "DEBUG PG: Tokenized, num_items=%d\n", num_items);
-    fflush(stderr);
 
     crf_items = malloc(num_items * sizeof(CrfSuiteItem));
-    fprintf(stderr, "DEBUG PG: Building crf_items\n");
-    fflush(stderr);
     for (i = 0; i < num_items; i++)
       crf_items[i] = tokens[i].features;
 
-    fprintf(stderr, "DEBUG PG: Calling crfsuite_model_tag\n");
-    fflush(stderr);
     if (crfsuite_model_tag(usaddress_model, crf_items, num_items, &labels) !=
         0) {
       free(crf_items);
@@ -106,8 +85,6 @@ Datum parse_address_crf(PG_FUNCTION_ARGS) {
       MemoryContextSwitchTo(oldcontext);
       ereport(ERROR, (errmsg("Tagging failed")));
     }
-    fprintf(stderr, "DEBUG PG: Tagging succeeded\n");
-    fflush(stderr);
 
     // Filter out commas
 
@@ -149,28 +126,14 @@ Datum parse_address_crf(PG_FUNCTION_ARGS) {
     }
 
     // Now we can free the original arrays
-    fprintf(stderr, "DEBUG PG: About to free_token_features\n");
-    fflush(stderr);
     free_token_features(tokens, num_items);
-    fprintf(stderr, "DEBUG PG: free_token_features done\n");
-    fflush(stderr);
 
-    fprintf(stderr, "DEBUG PG: About to free labels\n");
-    fflush(stderr);
-    for (i = 0; i < num_items; i++) { // free original labels
-      // fprintf(stderr, "DEBUG PG: freeing label %d: %p\n", i,
-      // (void*)labels[i]); fflush(stderr);
+    for (i = 0; i < num_items; i++) {
       free(labels[i]);
     }
     free(labels);
-    fprintf(stderr, "DEBUG PG: free labels done\n");
-    fflush(stderr);
 
-    fprintf(stderr, "DEBUG PG: About to free crf_items\n");
-    fflush(stderr);
     free(crf_items);
-    fprintf(stderr, "DEBUG PG: free crf_items done\n");
-    fflush(stderr);
 
     // Wait, original code kept 'tokens' and 'labels' directly in uctx.
     // uctx->tokens = tokens;
